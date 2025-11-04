@@ -1,11 +1,8 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
+  // previewFeatures can be added here if needed in the future
 }
 
 datasource db {
@@ -13,11 +10,133 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Keep prices in minor units (öre, cents). Snapshot names, prices, taxes on Order.
+/// Use "active" flags to hide products without deleting.
+
 model Product {
-  id          String   @id @default(cuid())
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  name          String
+  description   String?
+  sku           String   @unique
+  imageUrl      String?
+  weightG       Int      @default(0)
+  hsCode        String?      // for customs forms
+  originCountry String?      // e.g. "SE"
+  active        Boolean  @default(true)
+
+  // Inventory is simple for MVP. Decrement on "paid".
+  inventory     Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  prices        Price[]
+  orderItems    OrderItem[]
+
+  @@index([active])
+  @@index([slug])
+}
+
+model Price {
+  id          String  @id @default(cuid())
+  productId   String
+  currency    String  // ISO 4217: "SEK", "EUR", "USD", "GBP"
+  amountMinor Int     // 12900 => 129.00
+  active      Boolean @default(true)
+
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([productId, currency]) // one price per currency
+  @@index([currency, active])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+}
+
+/// Order stores snapshots to remain immutable even if products change later.
+/// "email" must be captured also for guest orders.
+model Order {
+  id            String   @id @default(cuid())
+  userId        String?
+  email         String
+  country       String    // shipping destination country code, e.g. "SE"
+  currency      String
+  status        OrderStatus @default(PENDING)
+
+  subtotalMinor Int       // items total (excl tax & shipping)
+  shippingMinor Int       @default(0)
+  vatMinor      Int       @default(0)
+  discountMinor Int       @default(0)
+  totalMinor    Int       // computed snapshot (subtotal + shipping + vat - discount)
+
+  // Stripe integration (nullable until created)
+  stripePiId    String?   // PaymentIntent id
+  stripeCsId    String?   // Checkout Session id (if using)
+  stripeCustId  String?   // Stripe Customer id (optional)
+
+  // Address snapshots (keep JSON to avoid schema drift between countries)
+  shippingName  String?
+  shippingAddr  Json?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User?    @relation(fields: [userId], references: [id])
+  items         OrderItem[]
+
+  @@index([status, createdAt])
+  @@index([email, createdAt])
+  @@index([currency])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String
+  quantity    Int
+  // Snapshots to preserve history
   name        String
-  description String?
+  unitMinor   Int      // price per unit (minor)
+  currency    String
+
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model ShippingRate {
+  id          String  @id @default(cuid())
+  zone        String  // "EU","NA","APAC","ROW"
+  minWeightG  Int     @default(0)
+  maxWeightG  Int     @default(20000)
   priceMinor  Int
   currency    String
+  incoterm    String  // "DAP" | "DDP"
+  active      Boolean @default(true)
+
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([zone, active])
+  @@index([currency])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
 }
