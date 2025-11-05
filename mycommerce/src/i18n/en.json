@@ -1,0 +1,6 @@
+{
+  "site": { "title": "Store", "currency": "Currency", "country": "Country" },
+  "nav": { "home": "Home", "cart": "Cart" },
+  "product": { "addToCart": "Add to cart", "outOfStock": "Out of stock" },
+  "list": { "title": "Products" }
+}

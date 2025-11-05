@@ -1,0 +1,6 @@
+{
+  "site": { "title": "Butik", "currency": "Valuta", "country": "Land" },
+  "nav": { "home": "Hem", "cart": "Kundvagn" },
+  "product": { "addToCart": "Lägg i kundvagn", "outOfStock": "Slut i lager" },
+  "list": { "title": "Produkter" }
+}
